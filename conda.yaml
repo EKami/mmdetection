@@ -1,0 +1,36 @@
+name: openmmlab
+channels:
+  - conda-forge
+  - pytorch
+  - nvidia
+dependencies:
+  - black
+  - python=3.11
+  - pip
+  - opencv
+  - openssl
+  - cffi
+  - conda
+  - h5py
+  - scipy
+  - scikit-learn
+  - matplotlib
+  - numpy
+  - pillow
+  - jupyterlab
+  - pandas
+  - requests
+  - scikit-image
+  - scipy
+  - tqdm
+  - future
+  - tensorboard
+  - pytorch::torchvision
+  - pytorch::pytorch=2.1.0
+  - pytorch::pytorch-cuda=12.1
+  - openmim
+  - mmengine
+  - nvidia/label/cuda-12.1.0::cuda
+  - pip:
+    - mmdet
+    - mmcv
