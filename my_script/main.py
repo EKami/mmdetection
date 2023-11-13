@@ -1,12 +1,16 @@
 import os
 from pathlib import Path
 
+from my_script.download_data import download_balloon_ds, download_pretrained_model
 from my_script.runner import Runner
 
 cur_dir = Path(os.path.dirname(os.path.abspath(__file__)))
 root_dir = (cur_dir / "..").resolve()
 
 def prepare_config(data_root, train_ann_file, val_ann_file):
+    download_pretrained_model()
+    download_balloon_ds()
+
     _base_ = './rtmdet_tiny_8xb32-300e_coco.py'
 
     train_batch_size_per_gpu = 4

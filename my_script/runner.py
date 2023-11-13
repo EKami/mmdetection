@@ -12,11 +12,13 @@ from typing import Callable, Dict, List, Optional, Sequence, Union
 
 import torch
 import torch.nn as nn
+from mmengine.runner.runner import ParamSchedulerType, _SlicedDataset
 from torch.nn.parallel.distributed import DistributedDataParallel
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 
 import mmengine
+from mmdet.utils import ConfigType
 from mmengine.config import Config, ConfigDict
 from mmengine.dataset import worker_init_fn as default_worker_init_fn
 from mmengine.device import get_device
@@ -35,20 +37,22 @@ from mmengine.optim import (OptimWrapper, OptimWrapperDict, _ParamScheduler,
 from mmengine.registry import (DATA_SAMPLERS, DATASETS, EVALUATOR, FUNCTIONS,
                                HOOKS, LOG_PROCESSORS, LOOPS, MODEL_WRAPPERS,
                                MODELS, OPTIM_WRAPPERS, PARAM_SCHEDULERS,
-                               RUNNERS, VISUALIZERS, DefaultScope)
+                               VISUALIZERS, DefaultScope)
 from mmengine.utils import apply_to, digit_version, get_git_hash, is_seq_of
 from mmengine.utils.dl_utils import (TORCH_VERSION, collect_env,
                                      set_multi_processing)
 from mmengine.visualization import Visualizer
-from .activation_checkpointing import turn_on_activation_checkpointing
-from .base_loop import BaseLoop
-from .checkpoint import (_load_checkpoint, _load_checkpoint_to_model,
-                         find_latest_checkpoint, save_checkpoint,
-                         weights_to_cpu)
-from .log_processor import LogProcessor
-from .loops import EpochBasedTrainLoop, IterBasedTrainLoop, TestLoop, ValLoop
-from .priority import Priority, get_priority
-from .utils import _get_batch_size, set_random_seed
+from mmengine.runner.activation_checkpointing import turn_on_activation_checkpointing
+from mmengine.runner.base_loop import BaseLoop
+from mmengine.runner.checkpoint import (
+    _load_checkpoint, _load_checkpoint_to_model,
+    find_latest_checkpoint, save_checkpoint, weights_to_cpu
+)
+from mmengine.runner.log_processor import LogProcessor
+from mmengine.runner.loops import EpochBasedTrainLoop, IterBasedTrainLoop, TestLoop, ValLoop
+from mmengine.runner.priority import Priority, get_priority
+from mmengine.runner.utils import _get_batch_size, set_random_seed
+
 
 class Runner:
     """A training helper for PyTorch.
@@ -236,34 +240,34 @@ class Runner:
     _test_loop: Optional[Union[BaseLoop, Dict]]
 
     def __init__(
-        self,
-        model: Union[nn.Module, Dict],
-        work_dir: str,
-        train_dataloader: Optional[Union[DataLoader, Dict]] = None,
-        val_dataloader: Optional[Union[DataLoader, Dict]] = None,
-        test_dataloader: Optional[Union[DataLoader, Dict]] = None,
-        train_cfg: Optional[Dict] = None,
-        val_cfg: Optional[Dict] = None,
-        test_cfg: Optional[Dict] = None,
-        auto_scale_lr: Optional[Dict] = None,
-        optim_wrapper: Optional[Union[OptimWrapper, Dict]] = None,
-        param_scheduler: Optional[Union[_ParamScheduler, Dict, List]] = None,
-        val_evaluator: Optional[Union[Evaluator, Dict, List]] = None,
-        test_evaluator: Optional[Union[Evaluator, Dict, List]] = None,
-        default_hooks: Optional[Dict[str, Union[Hook, Dict]]] = None,
-        custom_hooks: Optional[List[Union[Hook, Dict]]] = None,
-        data_preprocessor: Union[nn.Module, Dict, None] = None,
-        load_from: Optional[str] = None,
-        resume: bool = False,
-        launcher: str = 'none',
-        env_cfg: Dict = dict(dist_cfg=dict(backend='nccl')),
-        log_processor: Optional[Dict] = None,
-        log_level: str = 'INFO',
-        visualizer: Optional[Union[Visualizer, Dict]] = None,
-        default_scope: str = 'mmengine',
-        randomness: Dict = dict(seed=None),
-        experiment_name: Optional[str] = None,
-        cfg: Optional[ConfigType] = None,
+            self,
+            model: Union[nn.Module, Dict],
+            work_dir: str,
+            train_dataloader: Optional[Union[DataLoader, Dict]] = None,
+            val_dataloader: Optional[Union[DataLoader, Dict]] = None,
+            test_dataloader: Optional[Union[DataLoader, Dict]] = None,
+            train_cfg: Optional[Dict] = None,
+            val_cfg: Optional[Dict] = None,
+            test_cfg: Optional[Dict] = None,
+            auto_scale_lr: Optional[Dict] = None,
+            optim_wrapper: Optional[Union[OptimWrapper, Dict]] = None,
+            param_scheduler: Optional[Union[_ParamScheduler, Dict, List]] = None,
+            val_evaluator: Optional[Union[Evaluator, Dict, List]] = None,
+            test_evaluator: Optional[Union[Evaluator, Dict, List]] = None,
+            default_hooks: Optional[Dict[str, Union[Hook, Dict]]] = None,
+            custom_hooks: Optional[List[Union[Hook, Dict]]] = None,
+            data_preprocessor: Union[nn.Module, Dict, None] = None,
+            load_from: Optional[str] = None,
+            resume: bool = False,
+            launcher: str = 'none',
+            env_cfg: Dict = dict(dist_cfg=dict(backend='nccl')),
+            log_processor: Optional[Dict] = None,
+            log_level: str = 'INFO',
+            visualizer: Optional[Union[Visualizer, Dict]] = None,
+            default_scope: str = 'mmengine',
+            randomness: Dict = dict(seed=None),
+            experiment_name: Optional[str] = None,
+            cfg: Optional[ConfigType] = None,
     ):
         self._work_dir = osp.abspath(work_dir)
         mmengine.mkdir_or_exist(self._work_dir)
@@ -749,7 +753,7 @@ class Runner:
     def build_visualizer(
             self,
             visualizer: Optional[Union[Visualizer,
-                                       Dict]] = None) -> Visualizer:
+            Dict]] = None) -> Visualizer:
         """Build a global asscessable Visualizer.
 
         Args:
@@ -961,7 +965,7 @@ class Runner:
                 group['lr'] = group['lr'] * ratio
 
     def build_optim_wrapper(
-        self, optim_wrapper: Union[Optimizer, OptimWrapper, Dict]
+            self, optim_wrapper: Union[Optimizer, OptimWrapper, Dict]
     ) -> Union[OptimWrapper, OptimWrapperDict]:
         """Build optimizer wrapper.
 
@@ -1165,7 +1169,7 @@ class Runner:
 
     def build_param_scheduler(
             self, scheduler: Union[_ParamScheduler, Dict,
-                                   List]) -> ParamSchedulerType:
+            List]) -> ParamSchedulerType:
         """Build parameter schedulers.
 
         ``build_param_scheduler`` should be called after
@@ -1253,7 +1257,7 @@ class Runner:
             return param_schedulers
 
     def build_evaluator(self, evaluator: Union[Dict, List,
-                                               Evaluator]) -> Evaluator:
+    Evaluator]) -> Evaluator:
         """Build evaluator.
 
         Examples of ``evaluator``::
@@ -1355,8 +1359,8 @@ class Runner:
         if num_batch_per_epoch is not None:
             world_size = get_world_size()
             num_samples = (
-                num_batch_per_epoch * _get_batch_size(dataloader_cfg) *
-                world_size)
+                    num_batch_per_epoch * _get_batch_size(dataloader_cfg) *
+                    world_size)
             dataset = _SlicedDataset(dataset, num_samples)
 
         # build sampler
@@ -2121,15 +2125,15 @@ class Runner:
 
     @master_only
     def save_checkpoint(
-        self,
-        out_dir: str,
-        filename: str,
-        file_client_args: Optional[dict] = None,
-        save_optimizer: bool = True,
-        save_param_scheduler: bool = True,
-        meta: Optional[dict] = None,
-        by_epoch: bool = True,
-        backend_args: Optional[dict] = None,
+            self,
+            out_dir: str,
+            filename: str,
+            file_client_args: Optional[dict] = None,
+            save_optimizer: bool = True,
+            save_param_scheduler: bool = True,
+            meta: Optional[dict] = None,
+            by_epoch: bool = True,
+            backend_args: Optional[dict] = None,
     ):
         """Save checkpoints.
 
@@ -2204,12 +2208,12 @@ class Runner:
 
         checkpoint = {
             'meta':
-            meta,
+                meta,
             'state_dict':
-            weights_to_cpu(model.state_dict()),
+                weights_to_cpu(model.state_dict()),
             'message_hub':
-            apply_to(self.message_hub.state_dict(),
-                     lambda x: hasattr(x, 'cpu'), lambda x: x.cpu()),
+                apply_to(self.message_hub.state_dict(),
+                         lambda x: hasattr(x, 'cpu'), lambda x: x.cpu()),
         }
         # save optimizer state dict to checkpoint
         if save_optimizer:
@@ -2261,7 +2265,7 @@ class Runner:
 
     def _check_scheduler_cfg(
             self, param_scheduler: Optional[Union[dict, list,
-                                                  _ParamScheduler]]) -> None:
+            _ParamScheduler]]) -> None:
         """Parse `param_scheduler` to a list of parameter schedulers, or a
         `dict` of which each value is a list of parameter schedulers.
 
@@ -2320,9 +2324,9 @@ class Runner:
                     assert isinstance(
                         _param_scheduler,
                         (dict, tuple, list, _ParamScheduler)), (
-                            'Each value of `param_scheduler` should be a '
-                            f'dict or a list, but got {_param_scheduler} with '
-                            f'type {type(_ParamScheduler)}')
+                        'Each value of `param_scheduler` should be a '
+                        f'dict or a list, but got {_param_scheduler} with '
+                        f'type {type(_ParamScheduler)}')
 
         else:
             raise TypeError(
@@ -2357,7 +2361,7 @@ class Runner:
         dash_line = '-' * 60
         self.logger.info('\n' + dash_line + '\nSystem environment:' +
                          env_info + '\n'
-                         '\nRuntime environment:' + runtime_env_info + '\n' +
+                                    '\nRuntime environment:' + runtime_env_info + '\n' +
                          dash_line + '\n')
 
         if self.cfg._cfg_dict:
