@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 from mim.commands import download as mim_download
-from tools.misc.download_dataset import download
+from tools.misc.download_dataset import download as mm_download
 
 cur_dir = Path(os.path.dirname(os.path.abspath(__file__)))
 root_dir = (cur_dir / "..").resolve()
@@ -15,6 +15,13 @@ def download_pretrained_model():
     package = "mmdet"
     configs = ["rtmdet_tiny_8xb32-300e_coco"]
     mim_download(package, configs, str(cpk_dir))
+    return cpk_dir
 
 def download_balloon_ds():
-    pass
+    # !python tools/misc/download_dataset.py --dataset-name balloon --save-dir data --unzip
+    url = "https://download.openmmlab.com/mmyolo/data/balloon_dataset.zip"
+    to_dir = root_dir / "data"
+    os.makedirs(to_dir, exist_ok=True)
+    mm_download(url, to_dir, unzip=True, delete=False, threads=1)
+    ret_dir = to_dir / "balloon"
+    return ret_dir

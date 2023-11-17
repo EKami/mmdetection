@@ -114,7 +114,8 @@ def main():
         runner = RUNNERS.build(cfg)
 
     # start training
-    runner.train()
+    model = runner.train()
+    print(f"Finished training!")
 
 
 if __name__ == '__main__':

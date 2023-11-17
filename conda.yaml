@@ -4,8 +4,8 @@ channels:
   - pytorch
   - nvidia
 dependencies:
-  - black
   - python=3.11
+  - black
   - pip
   - opencv
   - openssl
@@ -28,8 +28,10 @@ dependencies:
   - pytorch::torchvision
   - pytorch::pytorch=2.1.0
   - pytorch::pytorch-cuda=12.1
+  - pytorch-lightning=2.1.0
   - openmim
   - mmengine
+  - wandb
   - nvidia/label/cuda-12.1.0::cuda
   - pip:
     - mmdet
