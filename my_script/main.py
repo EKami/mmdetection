@@ -120,6 +120,7 @@ def prepare_config(data_root):
         max_epochs=max_epochs,
         callbacks=[checkpoint_callback],
         enable_progress_bar=True,
+        num_sanity_val_steps=0
     )
     trainer.fit(model=trainer_model, train_dataloaders=train_loader, val_dataloaders=val_loader)
 

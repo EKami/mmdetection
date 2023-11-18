@@ -112,7 +112,11 @@ class CustomCocoDataset(CocoDataset):
             raise ValueError(f'Unknown step {step}')
         super().__init__(**kwargs)
 
-    def __getitem__(self, idx: int) -> dict:
+    def __getitem__(self, idx: int):
+        # Runs the transforms on the image
         items = super().__getitem__(idx)
-        # TODO run transforms and return tensors here
-        return items
+        img = items['inputs']
+        bboxes = items['data_samples']['gt_instances']['bboxes']
+        labels = items['data_samples']['gt_instances']['labels']
+        # TODO return tensors here
+        return img, bboxes, labels
