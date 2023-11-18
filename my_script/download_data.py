@@ -8,8 +8,7 @@ from tools.misc.download_dataset import download as mm_download
 cur_dir = Path(os.path.dirname(os.path.abspath(__file__)))
 root_dir = (cur_dir / "..").resolve()
 
-def download_pretrained_model():
-    cpk_name = "rtmdet_tiny_8xb32-300e_coco"
+def download_pretrained_model(cpk_name="rtmdet_tiny_8xb32-300e_coco"):
     cpk_dir = root_dir / "checkpoints"
     os.makedirs(cpk_dir, exist_ok=True)
     package = "mmdet"

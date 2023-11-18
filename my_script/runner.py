@@ -1,94 +1,137 @@
 import os
-from typing import Dict, Any
 
-import torch
-import wandb
-import pytorch_lightning as pl
-import numpy as np
-from PIL import Image
+import tempfile
+from mmdet.apis import DetInferencer
+from pathlib import Path
+import os.path as osp
+import mmcv
+from mmdet.utils import setup_cache_size_limit_of_dynamo
+from tqdm import tqdm
 
+from mmengine.fileio import dump, load
+from mmengine.config import Config
+from mmengine.registry import RUNNERS
+from mmengine.runner import Runner
 
-class BBoxPlModel(pl.LightningModule):
-    def __init__(self, model, lr, metrics):
-        super().__init__()
-        self.model = model
-        self.lr = lr
-        self.criterion = model.loss
-        self.metrics = metrics
+from my_script.download_data import download_pretrained_model, download_balloon_ds
 
-
-    def training_step(self, batch, batch_idx):
-        # training_step defines the train loop.
-        # it is independent of forward
-        # imgs, gt_masks = batch
-        # pred_masks = self.model(imgs)
-        # loss = self.criterion(pred_masks, gt_masks)
-
-        self.model.train_step(batch, optim_wrapper=self.runner.optim_wrapper)
-
-        self.log("train_loss", loss, prog_bar=True, on_step=False, on_epoch=True, sync_dist=True)
-        for metric in self.metrics:
-            metric_val = metric(pred_masks, gt_masks)
-            self.log(
-                f"train_{metric.__name__}",
-                metric_val,
-                prog_bar=True,
-                on_step=False,
-                on_epoch=True,
-                sync_dist=True,
-            )
-        return loss
-
-    def _save_batch_masks(self, epoch_idx, imgs, pred_masks):
-        output_dir = self.masks_debug_output / f"epoch_{epoch_idx}"
-        os.makedirs(output_dir, exist_ok=True)
-        for i, (img, mask) in enumerate(zip(imgs, pred_masks)):
-            img = (img.cpu().numpy() * 255).astype(np.uint8)
-            mask = mask.cpu().numpy().astype(np.uint8)
-            img = Image.fromarray(np.moveaxis(img, 0, 2))
-            mask = Image.fromarray(np.squeeze(mask))
-            mask = mask.convert("RGB")
-            img.save(output_dir / f"img_{i}.png")
-            mask.save(output_dir / f"mask_{i}.png")
-        print(f"Saved masks to {output_dir}")
-
-    def validation_step(self, batch, batch_idx):
-        x, y = batch
-        pred_masks = self.model(x)
-        loss = self.criterion(pred_masks, y)
-        self.log("val_loss", loss, prog_bar=True, on_step=False, on_epoch=True, sync_dist=True)
-        for metric in self.metrics:
-            metric_val = metric(pred_masks, y)
-            self.log(
-                f"val_{metric.__name__}",
-                metric_val,
-                prog_bar=True,
-                on_step=False,
-                on_epoch=True,
-                sync_dist=True,
-            )
-        # Only save for the first batch
-        if batch_idx == 0:
-            if self.trainer.sanity_checking:
-                epoch_idx = "sanity_check"
-            else:
-                epoch_idx = self.current_epoch
-            self._save_batch_masks(epoch_idx, x, pred_masks)
-        return loss
-
-    def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(
-            self.model.parameters(),
-            # Higher wd = Reduce over-fitting but also reduce the capacity of the model
-            # to make good preds
-            # Lower wd = Increases the capacity of the model, increases over-fitting
-            weight_decay=0.05,
-            lr=self.lr,
-        )
-        return optimizer
-
-    def on_save_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
-        checkpoint["wand_train_url"] = wandb.run.get_url()
-        super().on_save_checkpoint(checkpoint)
+cur_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+root_dir = (cur_dir / "..").resolve()
 
 
+def _inference_demo():
+    print('Start inference demo...')
+    tmp_dir = Path(tempfile.mkdtemp())
+    # Choose to use a config
+    model_name = 'rtmdet_tiny_8xb32-300e_coco'
+    # Setup a checkpoint file to load
+    checkpoint = download_pretrained_model(cpk_name=model_name)
+    # Set the device to be used for evaluation
+    device = 'cuda'
+
+    # Initialize the DetInferencer
+    inferencer = DetInferencer(model_name, str(checkpoint), device)
+
+    # Use the detector to do inference
+    img = str(root_dir / 'demo' / 'demo.jpg')
+    result = inferencer(img, out_dir=str(tmp_dir))
+    img_path = tmp_dir / 'vis' / 'demo.jpg'
+    print(f"Resulting image can be found in {img_path}")
+    return result
+
+
+def convert_balloon_to_coco(ann_file, out_file, image_prefix):
+    data_infos = load(ann_file)
+
+    annotations = []
+    images = []
+    obj_count = 0
+    for idx, v in enumerate(tqdm(data_infos.values())):
+        filename = v['filename']
+        img_path = osp.join(image_prefix, filename)
+        height, width = mmcv.imread(img_path).shape[:2]
+
+        images.append(
+            dict(id=idx, file_name=filename, height=height, width=width))
+
+        for _, obj in v['regions'].items():
+            assert not obj['region_attributes']
+            obj = obj['shape_attributes']
+            px = obj['all_points_x']
+            py = obj['all_points_y']
+            poly = [(x + 0.5, y + 0.5) for x, y in zip(px, py)]
+            poly = [p for x in poly for p in x]
+
+            x_min, y_min, x_max, y_max = (min(px), min(py), max(px), max(py))
+
+            data_anno = dict(
+                image_id=idx,
+                id=obj_count,
+                category_id=0,
+                bbox=[x_min, y_min, x_max - x_min, y_max - y_min],
+                area=(x_max - x_min) * (y_max - y_min),
+                segmentation=[poly],
+                iscrowd=0)
+            annotations.append(data_anno)
+            obj_count += 1
+
+    coco_format_json = dict(
+        images=images,
+        annotations=annotations,
+        categories=[{
+            'id': 0,
+            'name': 'balloon'
+        }])
+    dump(coco_format_json, out_file)
+
+
+def _train(config_file, work_dir=None):
+    # Reduce the number of repeated compilations and improve
+    # training speed.
+    setup_cache_size_limit_of_dynamo()
+
+    # load config
+    cfg = Config.fromfile(config_file)
+    cfg.launcher = 'none'
+
+    if work_dir is None:
+        cfg.work_dir = osp.join('./work_dirs', osp.splitext(osp.basename(config_file))[0])
+    else:
+        cfg.work_dir = str(work_dir)
+
+    runner = Runner.from_cfg(cfg)
+    # start training
+    model = runner.train()
+    print(f"Finished training!")
+
+
+def _custom_training_demo():
+    # Now train a custom model
+    print('Start training...')
+    data_dir = download_balloon_ds()
+    convert_balloon_to_coco(
+        ann_file=data_dir / 'train' / 'via_region_data.json',
+        out_file=data_dir / 'train.json',
+        image_prefix=data_dir / 'train'
+    )
+    convert_balloon_to_coco(
+        ann_file=data_dir / 'val' / 'via_region_data.json',
+        out_file=data_dir / 'val.json',
+        image_prefix=data_dir / 'val'
+    )
+    config_file = cur_dir / 'configs' / 'rtmdet_tiny_1xb4-20e_balloon.py'
+    with tempfile.TemporaryDirectory() as tmp_dirname:
+        _train(config_file, work_dir=tmp_dirname)
+
+def prepare_config(data_root):
+    #_inference_demo()
+    _custom_training_demo()
+
+def main():
+    data_root = Path("/tmp/balloon")
+    os.makedirs(data_root, exist_ok=True)
+    prepare_config(data_root)
+
+
+if __name__ == '__main__':
+    main()
