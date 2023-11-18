@@ -1,6 +1,5 @@
+import glob
 import os
-import re
-import sys
 from pathlib import Path
 
 from mim.commands import download as mim_download
@@ -10,12 +9,13 @@ cur_dir = Path(os.path.dirname(os.path.abspath(__file__)))
 root_dir = (cur_dir / "..").resolve()
 
 def download_pretrained_model():
+    cpk_name = "rtmdet_tiny_8xb32-300e_coco"
     cpk_dir = root_dir / "checkpoints"
     os.makedirs(cpk_dir, exist_ok=True)
     package = "mmdet"
-    configs = ["rtmdet_tiny_8xb32-300e_coco"]
-    mim_download(package, configs, str(cpk_dir))
-    return cpk_dir
+    mim_download(package, [cpk_name], str(cpk_dir))
+    cpk_file = Path(glob.glob(str(cpk_dir / f"{cpk_name}*.pth"))[0])
+    return cpk_file
 
 def download_balloon_ds():
     # !python tools/misc/download_dataset.py --dataset-name balloon --save-dir data --unzip

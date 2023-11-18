@@ -20,9 +20,12 @@ class BBoxPlModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         # training_step defines the train loop.
         # it is independent of forward
-        imgs, gt_masks = batch
-        pred_masks = self.model(imgs)
-        loss = self.criterion(pred_masks, gt_masks)
+        # imgs, gt_masks = batch
+        # pred_masks = self.model(imgs)
+        # loss = self.criterion(pred_masks, gt_masks)
+
+        self.model.train_step(batch, optim_wrapper=self.runner.optim_wrapper)
+
         self.log("train_loss", loss, prog_bar=True, on_step=False, on_epoch=True, sync_dist=True)
         for metric in self.metrics:
             metric_val = metric(pred_masks, gt_masks)
@@ -85,9 +88,6 @@ class BBoxPlModel(pl.LightningModule):
         return optimizer
 
     def on_save_checkpoint(self, checkpoint: Dict[str, Any]) -> None:
-        # Save the wsis used for training and validation
-        checkpoint["train_wsis"] = self.train_wsis
-        checkpoint["val_wsis"] = self.val_wsis
         checkpoint["wand_train_url"] = wandb.run.get_url()
         super().on_save_checkpoint(checkpoint)
 
