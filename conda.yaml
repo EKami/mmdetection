@@ -30,7 +30,8 @@ dependencies:
   - pytorch::pytorch-cuda=12.1
   - pytorch-lightning=2.1.0
   - openmim
-  - mmengine
+  # TODO upgrade to 0.10.0
+  - mmengine=0.9.1
   - wandb
   - nvidia/label/cuda-12.1.0::cuda
   - pip:

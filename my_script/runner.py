@@ -1,3 +1,4 @@
+import glob
 import os
 
 import tempfile
@@ -10,7 +11,6 @@ from tqdm import tqdm
 
 from mmengine.fileio import dump, load
 from mmengine.config import Config
-from mmengine.registry import RUNNERS
 from mmengine.runner import Runner
 
 from my_script.download_data import download_pretrained_model, download_balloon_ds
@@ -105,10 +105,9 @@ def _train(config_file, work_dir=None):
     print(f"Finished training!")
 
 
-def _custom_training_demo():
+def _custom_training_demo(config_file, data_dir, work_dir):
     # Now train a custom model
     print('Start training...')
-    data_dir = download_balloon_ds()
     convert_balloon_to_coco(
         ann_file=data_dir / 'train' / 'via_region_data.json',
         out_file=data_dir / 'train.json',
@@ -119,18 +118,33 @@ def _custom_training_demo():
         out_file=data_dir / 'val.json',
         image_prefix=data_dir / 'val'
     )
-    config_file = cur_dir / 'configs' / 'rtmdet_tiny_1xb4-20e_balloon.py'
-    with tempfile.TemporaryDirectory() as tmp_dirname:
-        _train(config_file, work_dir=tmp_dirname)
+    _train(config_file, work_dir=work_dir)
 
-def prepare_config(data_root):
-    #_inference_demo()
-    _custom_training_demo()
+
+def _test_trained_detector(config_file, data_dir, work_dir):
+    # Setup a checkpoint file to load
+    checkpoint = glob.glob(f'{work_dir}/best_coco*.pth')[0]
+
+    # Set the device to be used for evaluation
+    device = 'cuda'
+
+    # Initialize the DetInferencer
+    inferencer = DetInferencer(str(config_file), checkpoint, device)
+
+    # Use the detector to do inference
+    img = str(data_dir / 'val' / '4838031651_3e7b5ea5c7_b.jpg')
+    output_dir = str(work_dir / 'output')
+    result = inferencer(img, out_dir=output_dir)
+    print(f"Result available in {output_dir} = {result}")
+
 
 def main():
-    data_root = Path("/tmp/balloon")
-    os.makedirs(data_root, exist_ok=True)
-    prepare_config(data_root)
+    config_file = cur_dir / 'configs' / 'rtmdet_tiny_1xb4-20e_balloon.py'
+    work_dir = Path(tempfile.mkdtemp())
+    data_dir = download_balloon_ds()
+    _inference_demo()
+    _custom_training_demo(config_file, data_dir, work_dir)
+    _test_trained_detector(config_file, data_dir, work_dir)
 
 
 if __name__ == '__main__':

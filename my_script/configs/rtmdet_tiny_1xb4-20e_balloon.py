@@ -89,7 +89,8 @@ default_hooks = dict(
         max_keep_ckpts=2,  # only keep latest 2 checkpoints
         save_best='auto'
     ),
-    logger=dict(type='LoggerHook', interval=5))
+    logger=dict(type='LoggerHook', interval=5)
+)
 
 custom_hooks = [
     dict(
